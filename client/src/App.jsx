@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import AppLayout from './components/AppLayout';
 import Login from './pages/Login';
 import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
@@ -21,25 +22,27 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/landing" element={<Landing />} />
-          <Route path="/blog" element={<Blog />} />
-          <Route path="/help" element={<Helplines />} />
-          <Route path="/onboarding" element={<Onboarding />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/contacts" element={<Contacts />} />
-          <Route path="/fake-call" element={<FakeCall />} />
-          <Route path="/live-location" element={<LiveLocation />} />
-          <Route path="/evidence" element={<EvidenceCapture />} />
-          <Route path="/map" element={<MapPage />} />
-          <Route path="/report" element={<ReportIncident />} />
-          <Route path="/safe-route" element={<SafeRoute />} />
-          <Route path="/follower-detector" element={<FollowerDetector />} />
-          <Route path="/feed" element={<Feed />} />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
+        <AppLayout>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/landing" element={<Landing />} />
+            <Route path="/blog" element={<Blog />} />
+            <Route path="/help" element={<Helplines />} />
+            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/contacts" element={<Contacts />} />
+            <Route path="/fake-call" element={<FakeCall />} />
+            <Route path="/live-location" element={<LiveLocation />} />
+            <Route path="/evidence" element={<EvidenceCapture />} />
+            <Route path="/map" element={<MapPage />} />
+            <Route path="/report" element={<ReportIncident />} />
+            <Route path="/safe-route" element={<SafeRoute />} />
+            <Route path="/follower-detector" element={<FollowerDetector />} />
+            <Route path="/feed" element={<Feed />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </AppLayout>
       </Router>
     </AuthProvider>
   );

@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { ShieldAlert, MapPin, PhoneCall, Radio, Activity, ShieldCheck, Bell, Navigation } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
+import { useSOS } from '../context/SOSContext';
 import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
   const { userData, currentUser, loading } = useAuth();
+  const { triggerSOS } = useSOS();
   const navigate = useNavigate();
   const [isScanning, setIsScanning] = useState(false);
 
@@ -21,10 +23,6 @@ export default function Dashboard() {
   const toggleScan = () => {
     setIsScanning(true);
     setTimeout(() => setIsScanning(false), 3000);
-  };
-
-  const triggerSOS = () => {
-    alert("Emergency SOS Activated! (Simulation)");
   };
 
   if (loading) return null;

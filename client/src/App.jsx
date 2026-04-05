@@ -1,7 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { SOSProvider } from './context/SOSContext';
 import AppLayout from './components/AppLayout';
-import ProtectedRoute from './components/ProtectedRoute'; // New import
+import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
@@ -18,37 +19,43 @@ import Feed from './pages/Feed';
 import FollowerDetector from './pages/FollowerDetector';
 import Landing from './pages/Landing';
 import Blog from './pages/Blog';
+import SOSOverlay from "./components/SOSOverlay";
 
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <AppLayout>
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/landing" element={<Landing />} />
-            <Route path="/blog" element={<Blog />} />
-            <Route path="/onboarding" element={<Onboarding />} />
+      <SOSProvider>
+        <Router>
+          <div className="flex flex-col min-h-screen bg-slate-50 font-sans text-slate-900 relative">
+            <AppLayout>
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/landing" element={<Landing />} />
+                <Route path="/blog" element={<Blog />} />
+                <Route path="/onboarding" element={<Onboarding />} />
 
-            {/* Protected Routes (Bypassed in Guest Mode) */}
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/help" element={<Helplines />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/contacts" element={<Contacts />} />
-            <Route path="/fake-call" element={<FakeCall />} />
-            <Route path="/live-location" element={<LiveLocation />} />
-            <Route path="/evidence" element={<EvidenceCapture />} />
-            <Route path="/map" element={<MapPage />} />
-            <Route path="/report" element={<ReportIncident />} />
-            <Route path="/safe-route" element={<SafeRoute />} />
-            <Route path="/follower-detector" element={<FollowerDetector />} />
-            <Route path="/feed" element={<Feed />} />
-            
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
-        </AppLayout>
-      </Router>
+                {/* Protected Routes (Bypassed in Guest Mode) */}
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/help" element={<Helplines />} />
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/contacts" element={<Contacts />} />
+                <Route path="/fake-call" element={<FakeCall />} />
+                <Route path="/live-location" element={<LiveLocation />} />
+                <Route path="/evidence" element={<EvidenceCapture />} />
+                <Route path="/map" element={<MapPage />} />
+                <Route path="/report" element={<ReportIncident />} />
+                <Route path="/safe-route" element={<SafeRoute />} />
+                <Route path="/follower-detector" element={<FollowerDetector />} />
+                <Route path="/feed" element={<Feed />} />
+                
+                <Route path="*" element={<Navigate to="/" />} />
+              </Routes>
+            </AppLayout>
+            <SOSOverlay />
+          </div>
+        </Router>
+      </SOSProvider>
     </AuthProvider>
   );
 }

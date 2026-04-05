@@ -17,7 +17,7 @@ We are building the application in 15 stages. Each stage represents a critical m
 | **4** | **User Onboarding & Profile Intake** | ✅ |
 | **5** | **Dashboard Interface & Interaction** | ✅ |
 | **6** | **Emergency Contact Management** | ✅ |
-| **7** | **GIS Integration & Location Services** | ⌛ |
+| **7** | **GIS Integration & Location Services** | ✅ |
 | **8** | **SOS Frontend & Haptic Triggers** | ⌛ |
 | **9** | **Real-Time Notification Engine (SMS)** | ⌛ |
 | **10** | **Multi-Media Evidence Pipeline** | ⌛ |

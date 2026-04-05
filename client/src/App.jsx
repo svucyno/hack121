@@ -31,19 +31,19 @@ function App() {
             <Route path="/blog" element={<Blog />} />
             <Route path="/onboarding" element={<Onboarding />} />
 
-            {/* Protected Routes */}
-            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/help" element={<ProtectedRoute><Helplines /></ProtectedRoute>} />
-            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-            <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
-            <Route path="/fake-call" element={<ProtectedRoute><FakeCall /></ProtectedRoute>} />
-            <Route path="/live-location" element={<ProtectedRoute><LiveLocation /></ProtectedRoute>} />
-            <Route path="/evidence" element={<ProtectedRoute><EvidenceCapture /></ProtectedRoute>} />
-            <Route path="/map" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
-            <Route path="/report" element={<ProtectedRoute><ReportIncident /></ProtectedRoute>} />
-            <Route path="/safe-route" element={<ProtectedRoute><SafeRoute /></ProtectedRoute>} />
-            <Route path="/follower-detector" element={<ProtectedRoute><FollowerDetector /></ProtectedRoute>} />
-            <Route path="/feed" element={<ProtectedRoute><Feed /></ProtectedRoute>} />
+            {/* Protected Routes (Bypassed in Guest Mode) */}
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/help" element={<Helplines />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/contacts" element={<Contacts />} />
+            <Route path="/fake-call" element={<FakeCall />} />
+            <Route path="/live-location" element={<LiveLocation />} />
+            <Route path="/evidence" element={<EvidenceCapture />} />
+            <Route path="/map" element={<MapPage />} />
+            <Route path="/report" element={<ReportIncident />} />
+            <Route path="/safe-route" element={<SafeRoute />} />
+            <Route path="/follower-detector" element={<FollowerDetector />} />
+            <Route path="/feed" element={<Feed />} />
             
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

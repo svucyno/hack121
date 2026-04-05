@@ -16,8 +16,11 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     // Gracefully handle missing Firebase configurations for UI development
-    if (!auth || Object.keys(auth).length === 0) {
-      console.warn("Firebase Auth bypassed due to missing config.");
+    // 🟢 GUEST MODE: Always provide a mock user if configuration is missing
+    if (!auth || Object.keys(auth).length === 0 || !import.meta.env.VITE_FIREBASE_API_KEY) {
+      console.warn("Firebase Auth bypassed. Entering Guest Mode.");
+      setCurrentUser({ uid: "guest_user", displayName: "Guest User", email: "guest@example.com" });
+      setUserData({ profile: { fullName: "Guest User", age: "25", phoneNumber: "000-000-0000" }, onboardingComplete: true });
       setLoading(false);
       return () => {};
     }

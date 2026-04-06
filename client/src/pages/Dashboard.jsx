@@ -1,128 +1,404 @@
-import React, { useState, useEffect } from 'react';
-import { ShieldAlert, MapPin, PhoneCall, Radio, Activity, ShieldCheck, Bell, Navigation } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useSOS } from '../context/SOSContext';
+import { Shield, Mic, MapPin, PhoneCall, Map as MapIcon, Rss, HelpCircle, User, Smartphone, Radar, Navigation, MessageSquare, Video } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { db } from '../firebase';
+import { collection, addDoc, doc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import useShakeToSOS from '../hooks/useShakeToSOS';
+import useScreamDetection from '../hooks/useScreamDetection';
+import { useTranslation } from 'react-i18next';
+import { safeSpots } from '../data/safeSpots';
 
 export default function Dashboard() {
-  const { userData, currentUser, loading } = useAuth();
-  const { triggerSOS } = useSOS();
+  const { 
+    userData, logout, 
+    isLocationSharing, setIsLocationSharing,
+    sosActive, setSosActive,
+    sosCountdown, setSosCountdown,
+    sosStatus, setSosStatus,
+    sosAlertId, setSosAlertId,
+    sosLocation, setSosLocation,
+    sosMediaStream, setSosMediaStream,
+    isRecording, startEmergencyRecording, stopEmergencyRecording
+  } = useAuth();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const [isScanning, setIsScanning] = useState(false);
 
+  const [respondersCount, setRespondersCount] = useState(0);
+  const [nearestSpot, setNearestSpot] = useState(null);
+  const [spotDistance, setSpotDistance] = useState(0);
+  const [isGuiding, setIsGuiding] = useState(false);
+  const [lastSpokenDist, setLastSpokenDist] = useState(0);
+  const [lastEvidenceUrl, setLastEvidenceUrl] = useState(null);
+
+  // API URL logic
+  const productionUrl = 'https://safestep-virid.vercel.app';
+  const rawApiUrl = localStorage.getItem('VITE_API_URL') || import.meta.env.VITE_API_URL || productionUrl;
+  const API_URL = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
+
+  // Watch countdown to fire actions at T=0
   useEffect(() => {
-    // 🟢 GUEST MODE: Commenting out the onboarding redirect for the hackathon preview
-    /*
-    if (!loading && currentUser && (!userData || !userData.onboardingComplete)) {
-      navigate('/onboarding');
+    if (sosActive && sosCountdown === 0) {
+      fireSOSActions();
     }
-    */
-  }, [userData, currentUser, loading, navigate]);
+  }, [sosActive, sosCountdown]);
 
-  const toggleScan = () => {
-    setIsScanning(true);
-    setTimeout(() => setIsScanning(false), 3000);
+  // Persistent Vibration during countdown
+  useEffect(() => {
+    let vibe;
+    if (sosActive && sosCountdown > 0) {
+      if ("vibrate" in navigator) {
+        vibe = setInterval(() => navigator.vibrate([800, 200]), 1000);
+      }
+    }
+    return () => {
+      clearInterval(vibe);
+      if ("vibrate" in navigator) navigator.vibrate(0);
+    };
+  }, [sosActive, sosCountdown]);
+
+  // Listen for responders
+  useEffect(() => {
+    if (!sosAlertId) {
+      setRespondersCount(0);
+      return;
+    }
+    const unsubscribe = onSnapshot(doc(db, 'sos_alerts', sosAlertId), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setRespondersCount(data.responders?.length || 0);
+        if (data.evidenceUrl) setLastEvidenceUrl(data.evidenceUrl);
+      }
+    });
+    return () => unsubscribe();
+  }, [sosAlertId]);
+
+  const handleScreamDetected = useCallback(() => {
+    if (!sosActive) {
+      triggerSOS();
+    }
+  }, [sosActive]);
+
+  const { isListening: screamDetectOn, toggleListening: toggleScream, error: screamError } = useScreamDetection(handleScreamDetected);
+
+  const handleShakeDetected = useCallback(() => {
+    if (!sosActive) {
+      triggerSOS();
+    }
+  }, [sosActive]);
+
+  const { isShakeEnabled, toggleShake, permissionError } = useShakeToSOS(handleShakeDetected);
+
+  const getDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))) * 1000;
   };
 
-  if (loading) return null;
+  const speak = (text) => {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = i18n.language.startsWith('hi') ? 'hi-IN' : 'en-US';
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const triggerSOS = () => {
+    setSosActive(true);
+    setSosStatus(t('sos_countdown_active'));
+    setSosCountdown(10);
+    speak(t('sos_countdown_active'));
+    
+    // Pre-capture media globally AND START RECORDING IMMEDIATELY
+    const constraints = { audio: true, video: { facingMode: { ideal: "environment" } } };
+    navigator.mediaDevices.getUserMedia(constraints)
+      .then(stream => {
+        setSosMediaStream(stream);
+        console.log('🎤 Global media stream ready (Back Camera). Starting recording...');
+        startEmergencyRecording(stream);
+      })
+      .catch(e => {
+        console.error("❌ Video capture error, trying audio-only:", e);
+        // Fallback: try audio-only recording if video fails
+        navigator.mediaDevices.getUserMedia({ audio: true })
+          .then(stream => {
+            setSosMediaStream(stream);
+            console.log('🎤 Audio-only stream ready. Starting recording...');
+            startEmergencyRecording(stream);
+          })
+          .catch(e2 => console.error("❌ All media capture failed:", e2));
+      });
+
+    // Pre-capture location
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const { latitude, longitude } = pos.coords;
+      setSosLocation({ lat: latitude, lng: longitude });
+      
+      let closest = null;
+      let minDocs = Infinity;
+      safeSpots.forEach(spot => {
+        const dist = getDistance(latitude, longitude, spot.lat, spot.lng);
+        if (dist < minDocs) { minDocs = dist; closest = spot; }
+      });
+      
+      if (minDocs > 1000) {
+        closest = { id: 999, name: "Emergency Unit", lat: latitude + 0.003, lng: longitude + 0.002, type: "Police" };
+        minDocs = 400;
+      }
+      setNearestSpot(closest);
+      setSpotDistance(Math.round(minDocs));
+    }, null, { enableHighAccuracy: true });
+  };
+
+  const fireSOSActions = async () => {
+    setSosStatus(t('help_way'));
+    const lat = sosLocation?.lat || 0;
+    const lng = sosLocation?.lng || 0;
+    
+    // Use URL encoding for the comma (%2C) so SMS apps don't break the clickable link
+    const mapsLink = `https://www.google.com/maps/search/?api=1&query=${lat}%2C${lng}`;
+
+    if (nearestSpot) {
+      startGuidance();
+      speak(t('help_way'));
+      setTimeout(() => speak(`Safe spot found at ${nearestSpot.name}`), 2000);
+    }
+
+    // SMS
+    try {
+      const contacts = userData?.contacts || [];
+      if (contacts.length === 0 && userData?.phone) contacts.push({ name: "Emergency", phone: userData.phone });
+      await fetch(`${API_URL}/api/sos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: userData?.uid, userName: userData?.name || 'User', userPhone: userData?.phone, locationLink: mapsLink, contacts })
+      });
+    } catch (e) { console.error('❌ SMS Error:', e); }
+
+    // Volunteers
+    try {
+      const docRef = await addDoc(collection(db, 'sos_alerts'), {
+        victimId: userData?.uid, victimName: userData?.name || 'User',
+        lat, lng, status: 'active', timestamp: serverTimestamp(), locationLink: mapsLink, responders: []
+      });
+      setSosAlertId(docRef.id);
+    } catch (e) { console.error('❌ Volunteer Alert Error:', e); }
+
+    // Removed the "stop and restart" recording logic here. 
+    // The recording started at countdown 10 will simply continue uninterrupted
+    // even if the user switches to Google Maps, ensuring no data loss during app switch.
+  };
+
+  const startGuidance = () => {
+    if (!nearestSpot || !sosLocation) return;
+    setIsGuiding(true);
+    const origin = `${sosLocation.lat},${sosLocation.lng}`;
+    const dest = `${nearestSpot.lat},${nearestSpot.lng}`;
+    window.open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&travelmode=walking&dir_action=navigate`, '_blank');
+  };
+
+  const cancelSOS = async () => {
+    // Stop the recording FIRST — the onstop handler has captured IDs at start-time
+    // so it will still upload & save correctly even after we clear state below
+    stopEmergencyRecording();
+
+    // Small delay to let MediaRecorder fire onstop & begin upload
+    await new Promise(r => setTimeout(r, 500));
+
+    setSosActive(false);
+    setSosStatus('');
+    setSosCountdown(10);
+    if ("vibrate" in navigator) navigator.vibrate(0);
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
+    // Stop any remaining media stream tracks
+    if (sosMediaStream) {
+      sosMediaStream.getTracks().forEach(track => track.stop());
+      setSosMediaStream(null);
+    }
+
+    if (sosAlertId) {
+      try {
+        await updateDoc(doc(db, 'sos_alerts', sosAlertId), { status: 'cancelled', cancelledAt: serverTimestamp() });
+      } catch (e) { console.error('Failed to cancel SOS:', e); }
+    }
+    setSosAlertId(null);
+  };
+
+  const navItems = [
+    { icon: <Shield size={24} />, label: t('welcome').split(' ')[0], path: '/' },
+    { icon: <MapIcon size={24} />, label: t('map'), path: '/map' },
+    { icon: <Rss size={24} />, label: t('feed'), path: '/feed' },
+    { icon: <HelpCircle size={24} />, label: t('help'), path: '/help' },
+    { icon: <User size={24} />, label: t('profile'), path: '/profile' }
+  ];
 
   return (
-    <div className="flex flex-col p-6 font-sans pb-24">
-      {/* Header with Profile & Notifications */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-slate-800">
-            Hello, {userData?.profile?.fullName?.split(' ')[0] || currentUser?.displayName?.split(' ')[0] || 'Nari'}! 👋
-          </h1>
-          <motion.div 
-            onClick={toggleScan}
-            className="flex items-center gap-2 mt-1 cursor-pointer"
-          >
-            <div className={`w-2 h-2 rounded-full ${isScanning ? 'bg-primary animate-ping' : 'bg-accent'}`}></div>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">
-              {isScanning ? 'AI Scanning Environment...' : 'Safety status: Secure'}
-            </p>
-          </motion.div>
-        </div>
-        <div className="flex gap-3">
-          <button className="p-3 bg-white border border-slate-100 rounded-2xl shadow-soft text-slate-400 hover:text-primary transition-colors">
-            <Bell className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Primary SOS Action Area */}
-      <motion.div 
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.98 }}
-        className="w-full glass-panel rounded-[2rem] p-6 mb-8 relative overflow-hidden bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20 shadow-glow-sm"
-      >
-        <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-primary/20 rounded-full blur-3xl"></div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="p-3 bg-white rounded-2xl border border-primary/10">
-            <ShieldAlert className="w-6 h-6 text-primary" />
+    <div className="flex flex-col h-screen bg-slate-50 relative overflow-y-auto pb-24">
+      {/* Header */}
+      <div className="flex justify-between items-center p-5 bg-white shadow-sm shrink-0 sticky top-0 z-20">
+        <h1 className="text-2xl font-black text-rose-600 flex items-center gap-2 italic">
+          <Shield className="fill-rose-600" size={28} /> NIRBHAYA NARI
+        </h1>
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Welcome back</p>
+            <p className="font-bold text-slate-700 text-sm">{userData?.name || 'User'}</p>
           </div>
-          <span className="px-3 py-1 bg-primary/20 text-primary text-[10px] font-black uppercase tracking-widest rounded-full">Active Protection</span>
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-rose-500 to-orange-500 flex items-center justify-center text-white font-bold shadow-lg shadow-rose-200 cursor-pointer overflow-hidden" onClick={() => navigate('/profile')}>
+             {userData?.name?.charAt(0) || 'U'}
+          </div>
         </div>
-        
-        <h2 className="text-xl font-display font-bold text-slate-800 mb-1">One-Touch SOS</h2>
-        <p className="text-sm text-slate-500 mb-6 font-medium">Alert your entire emergency hub instantly.</p>
-        
-        <button 
-          onClick={triggerSOS}
-          className="w-full py-4 bg-primary text-white rounded-2xl font-bold uppercase tracking-widest shadow-glow hover:bg-primary-dark transition-all flex items-center justify-center gap-3"
-        >
-          <Radio className="w-5 h-5 animate-pulse" />
-          Dispatch SOS
-        </button>
-      </motion.div>
-
-      <h3 className="font-display font-bold text-slate-800 mb-4 px-1">Quick Assist Tools</h3>
-      <div className="grid grid-cols-2 gap-4 mb-8">
-        {[
-          { icon: Navigation, label: "Safe Route", path: "/safe-route", color: "text-blue-500", bg: "bg-blue-50" },
-          { icon: PhoneCall, label: "Fake Call", path: "/fake-call", color: "text-purple-500", bg: "bg-purple-50" },
-          { icon: ShieldCheck, label: "Follower Det.", path: "/follower-detector", color: "text-warning", bg: "bg-orange-50" },
-          { icon: MapPin, label: "Area Map", path: "/map", color: "text-accent", bg: "bg-green-50" }
-        ].map((action, idx) => (
-          <motion.button 
-            key={idx}
-            whileHover={{ y: -4, shadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate(action.path)}
-            className="flex flex-col items-center justify-center p-5 glass-panel rounded-3xl gap-4 transition-all hover:border-slate-300 group"
-          >
-            <div className={`p-4 rounded-2xl transition-all group-hover:scale-110 ${action.bg} ${action.color}`}>
-              <action.icon className="w-6 h-6" />
-            </div>
-            <span className="text-xs font-bold text-slate-700 tracking-tight">{action.label}</span>
-          </motion.button>
-        ))}
       </div>
-      
-      {/* Mini feed summary */}
-      <h3 className="font-display font-bold text-slate-800 mb-4 px-1">Recent Safety Activity</h3>
-      <div className="space-y-4">
-        {[
-          { icon: MapPin, title: "Police Station nearby", desc: "1.2km • 4 min drive", time: "2m ago", color: "text-accent" },
-          { icon: Activity, title: "Safe zone scanning", desc: "Your location is verified", time: "Now", color: "text-blue-500" }
-        ].map((item, idx) => (
-          <div key={idx} className="glass-panel rounded-2xl p-4 flex items-center gap-4 border-slate-100">
-            <div className={`p-2 rounded-xl bg-slate-50 ${item.color}`}>
-              <item.icon className="w-4 h-4" />
-            </div>
-            <div className="flex-1">
-              <div className="flex justify-between items-start">
-                <h4 className="text-sm font-bold text-slate-800">{item.title}</h4>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{item.time}</span>
+
+      <div className="flex-1 flex flex-col items-center justify-center p-6 gap-8">
+        {sosActive ? (
+          <div className="flex flex-col items-center justify-center bg-rose-50 w-full min-h-[500px] rounded-[40px] p-8 border-4 border-rose-200 shadow-2xl shadow-rose-100 animate-in zoom-in-95 duration-300">
+            <h2 className="text-2xl font-black text-rose-600 mb-2 uppercase tracking-tight">{sosStatus}</h2>
+            <div className="text-9xl font-black text-rose-600 mb-8 drop-shadow-md leading-none">{sosCountdown}</div>
+            
+            {nearestSpot && (
+              <div className="bg-white p-5 rounded-3xl border-2 border-rose-100 mb-6 w-full shadow-lg">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center">
+                    <Navigation size={24} />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-black text-slate-700 text-sm leading-none mb-1 uppercase tracking-tighter">Next Safe Destination</h3>
+                    <p className="text-xs text-slate-400 font-bold">{nearestSpot.name} • {spotDistance}m away</p>
+                  </div>
+                </div>
+                <button onClick={startGuidance} className="w-full py-4 bg-emerald-600 text-white font-black rounded-2xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-100 hover:bg-emerald-700 active:scale-95 transition-all">
+                  <Radar size={18} /> OPEN NAVIGATION MAP
+                </button>
               </div>
-              <p className="text-[10px] text-slate-500 font-medium mt-0.5 tracking-tight">{item.desc}</p>
-            </div>
+            )}
+
+            {isRecording && (
+              <div className="flex items-center gap-3 mb-8 bg-rose-600 text-white px-6 py-2 rounded-full animate-pulse shadow-lg shadow-rose-200">
+                <div className="w-3 h-3 rounded-full bg-white animate-ping"></div>
+                <span className="text-xs font-black uppercase tracking-widest">Live Evidence Recording</span>
+              </div>
+            )}
+
+            <p className="text-center text-slate-400 font-bold text-[10px] uppercase mb-8 tracking-widest px-4 leading-relaxed">
+              {respondersCount > 0 ? (
+                <span className="text-emerald-500 block animate-bounce">✨ {respondersCount} Volunteers have been notified!</span>
+              ) : t('sos_desc')}
+            </p>
+            
+            <button onClick={cancelSOS} className="w-full py-5 bg-slate-800 text-white font-black rounded-2xl shadow-xl active:scale-95 transition-transform tracking-widest text-lg uppercase">
+              {t('cancel_sos')}
+            </button>
           </div>
+        ) : (
+          <div className="relative group flex flex-col items-center">
+            <div className="absolute -inset-10 bg-rose-500/20 rounded-full blur-[60px] animate-[pulse_4s_infinite] group-hover:bg-rose-500/30 transition-all"></div>
+            <button onClick={triggerSOS} className="w-56 h-56 rounded-full bg-gradient-to-tr from-rose-600 to-rose-400 flex items-center justify-center shadow-2xl shadow-rose-200 border-8 border-white active:scale-90 transition-all relative z-10 overflow-hidden">
+               <div className="absolute inset-0 bg-white/20 opacity-0 group-active:opacity-100 transition-opacity"></div>
+               <span className="text-white text-6xl font-black italic tracking-tighter drop-shadow-md">SOS</span>
+            </button>
+            <button onClick={() => { triggerSOS(); setSosCountdown(3); }} className="mt-8 px-6 py-2 bg-white text-slate-500 border border-slate-200 font-bold rounded-full text-[10px] shadow-sm uppercase tracking-widest active:scale-95 transition z-10 relative hover:bg-slate-50">
+               ⚡ Quick Test (3s)
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Feature Toggles */}
+      {!sosActive && (
+        <>
+          <div className="px-8 mb-8 grid gap-4 shrink-0">
+             <div className="flex justify-between items-center bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+                <div className="flex items-center gap-4">
+                   <div className={`p-3 rounded-2xl ${isShakeEnabled ? 'bg-rose-50 text-rose-600' : 'bg-slate-50 text-slate-400'}`}>
+                      <Smartphone size={24} className={isShakeEnabled ? "animate-bounce" : ""} />
+                   </div>
+                   <div>
+                      <p className="font-black text-slate-700 text-sm tracking-tight">{t('shake_sos')}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Triple shake to fire</p>
+                   </div>
+                </div>
+                <button onClick={toggleShake} className={`w-14 h-8 rounded-full p-1.5 transition-all ${isShakeEnabled ? 'bg-rose-600' : 'bg-slate-200'}`}>
+                   <div className={`bg-white w-5 h-5 rounded-full shadow-sm transform transition-all ${isShakeEnabled ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                </button>
+             </div>
+
+             <div className="flex justify-between items-center bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+                <div className="flex items-center gap-4">
+                   <div className={`p-3 rounded-2xl ${screamDetectOn ? 'bg-rose-50 text-rose-600' : 'bg-slate-50 text-slate-400'}`}>
+                      <Mic size={24} className={screamDetectOn ? "animate-pulse" : ""} />
+                   </div>
+                   <div>
+                      <p className="font-black text-slate-700 text-sm tracking-tight">{t('scream_detection')}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Mic always listening</p>
+                   </div>
+                </div>
+                <button onClick={toggleScream} className={`w-14 h-8 rounded-full p-1.5 transition-all ${screamDetectOn ? 'bg-rose-600' : 'bg-slate-200'}`}>
+                   <div className={`bg-white w-5 h-5 rounded-full shadow-sm transform transition-all ${screamDetectOn ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                </button>
+             </div>
+
+             <div className="flex justify-between items-center bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+                <div className="flex items-center gap-4">
+                   <div className={`p-3 rounded-2xl ${isLocationSharing ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
+                      <MapPin size={24} className={isLocationSharing ? "animate-pulse" : ""} />
+                   </div>
+                   <div>
+                      <p className="font-black text-slate-700 text-sm tracking-tight">{t('location_sharing')}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Real-time tracking</p>
+                   </div>
+                </div>
+                <button onClick={() => { setIsLocationSharing(!isLocationSharing); if(!isLocationSharing) navigate('/live-location'); }} className={`w-14 h-8 rounded-full p-1.5 transition-all ${isLocationSharing ? 'bg-emerald-600' : 'bg-slate-200'}`}>
+                   <div className={`bg-white w-5 h-5 rounded-full shadow-sm transform transition-all ${isLocationSharing ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                </button>
+             </div>
+          </div>
+
+          {/* Quick Actions Grid */}
+          <div className="px-8 grid grid-cols-2 gap-4 mb-12">
+            {[
+              { id: 'fake-call', label: t('fake_call'), color: 'bg-indigo-50', iconColor: 'bg-indigo-600', icon: <PhoneCall size={24} /> },
+              { id: 'safe-route', label: t('safe_route'), color: 'bg-orange-50', iconColor: 'bg-orange-500', icon: <Navigation size={24} /> },
+              { id: 'contacts', label: t('add_contacts'), color: 'bg-emerald-50', iconColor: 'bg-emerald-600', icon: <User size={24} /> },
+              { id: 'evidence', label: 'Evidence Locker', color: 'bg-violet-50', iconColor: 'bg-violet-600', icon: <Video size={24} /> }
+            ].map(card => (
+              <div key={card.id} onClick={() => navigate(`/${card.id}`)} className={`${card.color} p-6 rounded-[32px] flex flex-col items-center gap-3 cursor-pointer group active:scale-95 transition-all hover:shadow-lg border border-white`}>
+                <div className={`w-14 h-14 rounded-2xl ${card.iconColor} text-white flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform`}>
+                  {card.icon}
+                </div>
+                <span className="font-black text-slate-700 text-xs text-center tracking-tight uppercase">{card.label}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Debug Footer */}
+          <div className="pb-8 px-8 flex flex-col items-center gap-4">
+            <div className="flex flex-col items-center gap-1.5 grayscale opacity-40">
+               <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em]">Universal System Node</span>
+               <span className="text-[10px] font-mono text-slate-700 break-all text-center px-6 leading-tight">{API_URL}</span>
+            </div>
+            <button onClick={() => {
+              const u = prompt("Emergency Node Override:", API_URL);
+              if(u) { localStorage.setItem("VITE_API_URL", u); window.location.reload(); }
+            }} className="text-[8px] font-black text-slate-400 bg-white border border-slate-200 px-4 py-2 rounded-full uppercase tracking-[0.1em] hover:bg-slate-50 transition-colors">
+              Configure Network
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Persistent Navigation */}
+      <div className="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-white/90 backdrop-blur-xl border-t border-slate-100 flex justify-between px-8 py-4 pb-10 z-50 rounded-t-[40px] shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
+        {navItems.map((item, index) => (
+          <button key={index} onClick={() => navigate(item.path)} className={`flex flex-col items-center gap-1.5 ${index === 0 ? 'text-rose-600 scale-110' : 'text-slate-300'} transition-all`}>
+            {item.icon}
+            <span className="text-[8px] font-black uppercase tracking-tighter">{item.label}</span>
+          </button>
         ))}
       </div>
     </div>
   );
 }
-

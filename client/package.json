@@ -1,7 +1,7 @@
 {
-  "name": "nirbhaya-nari-client",
+  "name": "client",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,10 +11,14 @@
   },
   "dependencies": {
     "firebase": "^12.11.0",
-    "framer-motion": "^12.38.0",
+    "i18next": "^26.0.3",
+    "i18next-browser-languagedetector": "^8.2.1",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.7.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-i18next": "^17.0.2",
+    "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.13.2"
   },
   "devDependencies": {

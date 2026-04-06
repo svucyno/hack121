@@ -1,88 +1,58 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Lock, ArrowRight, Loader2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { ShieldAlert } from 'lucide-react';
 
 export default function Login() {
+  const [error, setError] = useState('');
   const { loginWithGoogle } = useAuth();
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = async () => {
+  const handleGoogleLogin = async () => {
+    setError('');
     try {
-      setLoading(true);
       await loginWithGoogle();
       navigate('/');
     } catch (err) {
       console.error(err);
-      alert("Authentication failed. Please check your configuration.");
-    } finally {
-      setLoading(false);
+      setError('Failed to login with Google.');
     }
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50 p-8 items-center justify-center relative overflow-hidden">
-      {/* Background blobs for premium feel */}
-      <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-primary/10 rounded-full blur-3xl"></div>
-      <div className="absolute bottom-[-10%] left-[-10%] w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl"></div>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-background p-6">
+      <div className="flex items-center gap-3 mb-10 text-primary">
+        <ShieldAlert size={48} className="text-primary animate-pulse" />
+        <h1 className="text-4xl font-bold">Nirbhaya Nari</h1>
+      </div>
 
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-sm text-center z-10"
-      >
-        <div className="flex justify-center mb-6">
-          <div className="w-16 h-16 rounded-3xl bg-white shadow-soft flex items-center justify-center border border-slate-100">
-            <Shield className="w-8 h-8 text-primary" />
-          </div>
-        </div>
+      <div className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-6 text-center">
+        <h2 className="text-2xl font-bold text-secondary mb-2">Welcome Back</h2>
+        <p className="text-sm text-gray-500 mb-6">Sign in to access your safety dashboard</p>
 
-        <h1 className="text-3xl font-display font-bold text-slate-800 mb-2">Nirbhaya Nari</h1>
-        <p className="text-slate-500 font-medium mb-12">Empowering safety with AI intelligence.</p>
+        {error && <div className="text-red-500 text-sm mb-4">{error}</div>}
 
-        <div className="space-y-4">
-          <motion.button 
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleLogin}
-            disabled={loading}
-            className="w-full py-4 glass-panel rounded-2xl flex items-center justify-center gap-3 font-semibold text-slate-700 hover:bg-white transition-colors"
+        <button
+          onClick={handleGoogleLogin}
+          className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 font-bold py-4 rounded-xl shadow-sm hover:bg-gray-50 active:scale-95 transition mb-6"
+        >
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-6 h-6" />
+          Continue with Google
+        </button>
+
+        <div className="pt-4 border-t border-gray-100 flex flex-col gap-2">
+          <button 
+            onClick={() => navigate('/landing')}
+            className="text-sm font-bold text-gray-400 hover:text-primary transition"
           >
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin text-primary" />
-            ) : (
-              <>
-                <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
-                Continue with Google
-              </>
-            )}
-          </motion.button>
-
-          <div className="flex items-center gap-4 py-4">
-            <div className="flex-1 h-[1px] bg-slate-200"></div>
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Secure Access</span>
-            <div className="flex-1 h-[1px] bg-slate-200"></div>
-          </div>
-
-          <div className="p-4 bg-slate-100 rounded-2xl border border-slate-200 flex items-start gap-3 text-left">
-            <div className="p-2 bg-white rounded-lg border border-slate-200">
-              <Lock className="w-4 h-4 text-slate-500" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-slate-700 mb-0.5">End-to-End Encrypted</h4>
-              <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
-                Your data and location are private and shared only with your emergency network.
-              </p>
-            </div>
-          </div>
+            Discover SafeStep <span className="ml-1">→</span>
+          </button>
         </div>
-
-        <p className="mt-12 text-[10px] text-slate-400 font-medium leading-loose">
-          By continuing, you agree to our <span className="underline">Terms of Service</span> and <span className="underline">Privacy Policy</span>.
-        </p>
-      </motion.div>
+      </div>
+      
+      <p className="mt-8 text-xs text-gray-400 font-medium tracking-wide text-center max-w-xs">
+        By continuing, you agree to our <span className="underline">Terms of Service</span> and <span className="underline">Privacy Policy</span>.
+      </p>
     </div>
   );
 }

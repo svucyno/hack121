@@ -4,35 +4,17 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+  apiKey: "AIzaSyARWEfu5oYzO8Np56zIyIXU6BbRg9Jblw8",
+  authDomain: "womensafety-57ada.firebaseapp.com",
+  projectId: "womensafety-57ada",
+  storageBucket: "womensafety-57ada.firebasestorage.app",
+  messagingSenderId: "256494940289",
+  appId: "1:256494940289:web:5bb6c6a0a81389c4769d80",
+  measurementId: "G-N45W8H1CXM"
 };
 
-let app, auth, db, storage;
-
-try {
-  // Only initialize if we at least have an API key, otherwise mock
-  if (firebaseConfig.apiKey) {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-    storage = getStorage(app);
-  } else {
-    console.warn("Firebase API key missing. Running in UI-only layout mode.");
-    auth = {};
-    db = {};
-    storage = {};
-  }
-} catch (error) {
-  console.error("Firebase initialization failed:", error);
-  auth = {};
-  db = {};
-  storage = {};
-}
-
-export { auth, db, storage };
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const storage = getStorage(app);
